@@ -1,0 +1,92 @@
+
+#VARIABLES:
+#ad_id: an unique ID for each ad.
+#xyzcampaignid: an ID associated with each ad campaign of XYZ company.
+#fbcampaignid: an ID associated with how Facebook tracks each campaign.
+#age: age of the person to whom the ad is shown.
+#gender: gender of the person to whom the add is shown
+#interest: a code specifying the category to which the person's interest belongs (interests are as mentioned in the person's Facebook public profile).
+#Impressions: the number of times the ad was shown.
+#Clicks: number of clicks on for that ad.
+#Spent: Amount paid by company xyz to Facebook, to show that ad.
+#Total conversion: Total number of people who enquired about the product after seeing the ad.
+#Approved conversion: Total number of people who bought the product after seeing the ad.#
+
+
+#Se extrae el archivo que contiene los datos y se revisan sus características.
+ads <- read.csv("C:/Users/wsq08/Desktop/Proyecto/KAG_conversion_data.csv", sep = ",", header = TRUE)
+head(ads)
+str(ads)
+summary(ads)
+
+#Se convierten algunas variables a factor y se eliminan las tres primeras columnas.
+ads$gender = as.numeric(as.factor(ads$gender))
+ads$age = as.numeric(as.factor(ads$age))
+ads$interest = as.numeric(as.factor(ads$interest))
+adss <- subset(ads, select = -c(1,2,3))
+summary(adss)
+str(adss)
+
+#Verificación de los datos de correlación
+library(skimr)
+library(psych)
+pairs.panels(adss,gap=0)
+head(adss)
+skim(adss)
+table(adss$Approved_Conversion)
+
+#Se escala y nombra el nuevo data frame
+df <- scale(adss)
+head(df)
+
+library(tidyverse)
+library(cluster)
+library(factoextra)
+library(NbClust)
+library(tidyr)
+
+#Se realizan pruebas para escoger la cantidad de clústers a generar
+fviz_nbclust(df, kmeans, method = "wss")
+fviz_nbclust(df, kmeans, method = "silhouette")
+fviz_nbclust(df, kmeans, method = "gap_stat")
+#De acuerdo a los resultados, las metodogias sugieren realizar dos clústers
+#En intentos previos, generé 3 clusters, sin embargo existía mucho overlap entre dos clusters.
+
+#Se realiza el calculo de los clusters realizando 2 como previamente mencionado. 
+#Con 50 nstart para encontrar los centroides, sin embargo no se observó diferencia de realizarlo con mayor número de estos.
+kluster <- kmeans(df, centers = 2, nstart = 50)
+kluster
+str(kluster)
+
+#Se procede a plotear los clusters, para la presentación se mostrará solamente el primero.
+fviz_cluster(kluster, data = df)
+fviz_cluster(kluster, data = df, ellipse.type = "euclid",repel = TRUE,star.plot = TRUE) #ellipse.type= "t", "norm", "euclid"
+fviz_cluster(kluster, data = df, ellipse.type = "norm")
+
+#Se procede a incluir la nueva variable generada (Cluster) al data frame (adss)
+adss %>%
+  mutate(Cluster = kluster$cluster) %>%
+  group_by(Cluster) %>%
+  summarise_all("mean")
+
+#Se convierte a factor y se normalizan los datos. 
+df <- adss
+df
+df$clus<-as.factor(kluster$cluster)
+df
+
+df <- adss
+df <- scale(df)
+df<- as.data.frame(df)
+df$clus<-as.factor(kluster$cluster)
+df
+
+#Se convierte al data frame al formato Long Data y se utiliza la función gather para genrar un plot que idfentifique caracteristicas del data frame.
+library(dplyr)
+df$clus<-factor(df$clus)
+data_long <- gather(df, Variables, Valores, age:Approved_Conversion, factor_key=TRUE)
+data_long
+
+ggplot(data_long, aes(as.factor(x = Variables), y = Valores,group=clus, colour = clus)) + 
+stat_summary(fun = mean, geom="pointrange", size = 0.5)+
+stat_summary(geom="line")
